@@ -132,7 +132,7 @@ class BleInterface(QtCore.QObject):
         self.m_servicesUuid.clear()
         self.m_services.clear()
         self.setCurrentService(-1)
-        self.serviceChanged.emit(m_services)
+        self.serviceChanged.emit(self.m_services)
         self.m_control.discoverServices()
 
     def onDeviceDisconnected(self):
@@ -162,7 +162,7 @@ class BleInterface(QtCore.QObject):
         if self.m_devices.isEmpty():
             return
         if self.m_notificationDesc.isValid()and self.m_serivce:
-            self.m_service.writeDescriptor(self.m_notificationDesc,bytearray(0,0,0,0))
+            self.m_service.writeDescriptor(self.m_notificationDesc,bytearray(0,0))
         else:
             self.m_control.disconnectFromDevice()
             self.m_service = None
