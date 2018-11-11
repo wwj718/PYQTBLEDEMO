@@ -102,3 +102,4 @@ venv.bak/
 
 # mypy
 .mypy_cache/
+/.vs/zhouF96/v15/.suo
