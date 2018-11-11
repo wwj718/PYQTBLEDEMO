@@ -4,7 +4,7 @@ from PyQt5 import QtCore
 from PyQt5 import QtBluetooth
 
 
-
+'''
 class Deviceinfo(QtCore.QObject):
     devicechanged = PyQt5.QtCore.pyqtSignal()
 
@@ -19,7 +19,7 @@ class Deviceinfo(QtCore.QObject):
     def getAddress(self):
         return self.m_device.address().toString()
 
-    # 设备改变的信号触发函数，用于更新界面等功能
+    
     def emitDeviceChanged(self):
         pass
 
@@ -27,14 +27,17 @@ class Deviceinfo(QtCore.QObject):
         self.m_device = device
         self.devicechanged.emit()
 
+'''
 
 
 class BleInterface(QtCore.QObject):
     #signals
     statusInfoChanged = QtCore.pyqtSignal(str , bool)
-    dataReceved = QtCore.pyqtSignal(PyQt5.QtCore.QByteArray)
+    dataReceived = QtCore.pyqtSignal(QtCore.QByteArray)
     connectedChanged = QtCore.pyqtSignal(bool)
-    currengServiceChanged = QtCore.pyqtSignal(int)
+    servicesChanged=QtCore.pyqtSignal(list)
+    currentServiceChanged = QtCore.pyqtSignal(int)
+    currentDeviceChanged=QtCore.pyqtSignal(int)
     def __init__(self):
         super().__init__()
         self.m_devodeDoscoveryAgent = QtBluetooth.QBluetoothDeviceDiscoveryAgent()
@@ -45,7 +48,7 @@ class BleInterface(QtCore.QObject):
         self.m_service = QtBluetooth.QLowEnergyService    #用于存放设备具体使用的服务
         self.m_readCharacteristic = QtBluetooth.QLowEnergyCharacteristic()  #用于存放读取的服务的特性内容
         self.m_writeCharacteristic = QtBluetooth.QLowEnergyCharacteristic() #用于存放写入的服务的特性内容
-        self.m_devices = list(Deviceinfo) #用于存放获取的设备列表
+        self.m_devices =[] #用于存放获取的设备列表
         self.m_writemode = QtBluetooth.QLowEnergyService.WriteMode()
         self.m_readTimer = QtCore.QTimer()
 
@@ -60,7 +63,7 @@ class BleInterface(QtCore.QObject):
         #初始化相关变量
         self.m_connected(False)
         #self.m_control(None)
-        #self.m_readTimer(None)
+        self.m_readTimer=None
         #self.m_currentService(None)
         #self.m_currentDevice(None)
 
@@ -70,6 +73,28 @@ class BleInterface(QtCore.QObject):
         self.m_devodeDoscoveryAgent.error.connect(self.onDeviceScanError)
         self.m_devodeDoscoveryAgent.finished.connect(self.onScanFinished)
         self.m_devodeDoscoveryAgent.canceled.connect(self.onScanFinished)
+        self.dataReceived.connect(self.printDataReceived)
+
+    def printDataReceived(self,data=QtCore.QByteArray):
+        print("received data:{data}".format(data =data))
+
+    def update_connected(self,connected=bool):
+        if connected != self.m_connected:
+            self.m_connected = connected
+            self.connectedChanged.emit(connected)
+    def set_CurrentDevice(self,indx=int):
+        self.m_currentDevice=indx
+        self.currentDeviceChanged.emit( indx)
+
+    def get_CurrentDevice(self):
+        return  self.m_currentDevice
+
+    def setCurrentService(self,currentService = int):
+        if self.m_currentService == currentService:
+            return
+        self.update_currentService(currentService)
+        self.m_currentService=currentService
+        self.currentServiceChanged.emit(currentService)
 
     def scanDevices(self):
         self.m_devices.clear()
@@ -78,7 +103,7 @@ class BleInterface(QtCore.QObject):
 
     def read(self):
         if(self.m_service and self.m_readCharacteristic.isValid()):
-            self.m_service.characteristicRead(self.m_readCharacteristic)
+            self.m_service.readCharacteristic(self.m_readCharacteristic)
         
     def write(self,data=bytearray()):
         print("BLEInterface write :{datawrite}".format(datawrite=data))
@@ -96,7 +121,7 @@ class BleInterface(QtCore.QObject):
                 self.m_service.writeCharacteristic(self.m_writeCharacteristic,data,self.m_writemode)
     
     def addDevice(self, device):
-        if device.coreConfigurations() and QtBluetooth.QBluetoothDeviceInfo.LowEnergyCoreConfiguration:
+        if device.coreConfigurations() & QtBluetooth.QBluetoothDeviceInfo.LowEnergyCoreConfiguration:
             self.m_devices.append(QtBluetooth.QBluetoothDeviceInfo(device))
             print("Discovered LE Device name: {name} ,Address: {address} ".format(name=device.name(),address=device.address().toString()))
             print("Low Energy device found. Scanning more...")
@@ -105,6 +130,8 @@ class BleInterface(QtCore.QObject):
     def onScanFinished(self):
         if len(self.m_devices) == 0:
             print("Scan finished")
+        self.set_CurrentDevice(0)
+        self.connectCurrentDevice();
     
     def onDeviceScanError(self,error):
         if error == QtBluetooth.QBluetoothDeviceDiscoveryAgent.PoweredOffError:
@@ -120,7 +147,7 @@ class BleInterface(QtCore.QObject):
         if self.m_control:
             self.m_control.disconnectFromDevice()
             self.m_control = None
-        self.m_control = QtBluetooth.QLowEnergyController(self.m_devices[self.m_currentDevice].getDevice())
+        self.m_control = QtBluetooth.QLowEnergyController(self.m_devices[self.m_currentDevice])
         self.m_control.serviceDiscovered.connect(self.onServiceDiscovered)
         self.m_control.discoveryFinished.connect(self.onServiceScanDone)
         self.m_control.error.connect(self.onControllerError)
@@ -131,30 +158,34 @@ class BleInterface(QtCore.QObject):
     def onDeviceConnected(self):
         self.m_servicesUuid.clear()
         self.m_services.clear()
-        self.setCurrentService(-1)
-        self.serviceChanged.emit(self.m_services)
+        self.m_currentService = None
+        self.servicesChanged.emit(self.m_services)
         self.m_control.discoverServices()
 
     def onDeviceDisconnected(self):
-        #update_connected(false)
-        self.statusInfoChanged.emit("Device disconnected",false)
+        self.update_connected(False)
+        self.statusInfoChanged.emit("Device disconnected",False)
         print("Remote device disconnected")
        
-    def onServiceDiscovered(gatt=QtBluetooth.QBluetoothUuid()):
-         self.statusInfoChanged.emit("Service discovered. Waiting for service scan to be done...", true)
+    def onServiceDiscovered(self,gatt=QtBluetooth.QBluetoothUuid()):
+         self.statusInfoChanged.emit("Service discovered. Waiting for service scan to be done...", True)
+         print("Service discovered. Waiting for service scan to be done... GATT: {gatt} ".format(gatt=gatt))
 
     def onServiceScanDone(self):
         self.m_servicesUuid = self.m_control.services()
-        if m_servicesUuid.isEmpty():
-            self.statusInfoChanged.emit("Can't find any services.", true)
+        if len(self.m_servicesUuid)==0:
+            self.statusInfoChanged.emit("Can't find any services.", True)
+            print("Can't find any services.")
         else:
             self.m_services.clear()
             for uuid in self.m_servicesUuid:
                 self.m_services.append(uuid.toString())
             self.servicesChanged.emit(self.m_services)
-            self.m_currentService = -1
-            setCurrentService(0)
-            self.statusInfoChanged.emit("All services discovered.", true)
+            self.m_currentService = -1 #to force call update_currentService(once)
+            self.setCurrentService(0)
+            self.statusInfoChanged.emit("All services discovered.", True)
+            print("All services discovered.")
+            self.setCurrentService(3)
 
     def disconnectDevice(self):
         self.m_readTimer.deleteLater()
@@ -162,71 +193,82 @@ class BleInterface(QtCore.QObject):
         if self.m_devices.isEmpty():
             return
         if self.m_notificationDesc.isValid()and self.m_serivce:
-            self.m_service.writeDescriptor(self.m_notificationDesc,bytearray(0,0))
+            self.m_service.writeDescriptor(self.m_notificationDesc,bytearray(0,0,0,0))
         else:
             self.m_control.disconnectFromDevice()
             self.m_service = None
 
     def onControllerError(self,error=QtBluetooth.QLowEnergyController.error):
-        self.statusInfoChanged.emit("Cannot connect to remote device.", false)
+        self.statusInfoChanged.emit("Cannot connect to remote device.", False)
         print("Controller Error")
 
-    def onCharacteristicChanged(self,chara=QtBluetooth.QLowEnergyCharacteristic,value=bytearray):
-        print("Characteristic Changed {values}",values=value)
+    def onCharacteristicChanged(self,chara=QtBluetooth.QLowEnergyCharacteristic,value=QtCore.QByteArray):
+        print("Characteristic Changed {values}".format(values=value))
         self.dataReceived.emit(value)
 
-    def onCharacteristicWrite(self,c=QtBluetooth.QLowEnergyCharacteristic,value=bytearray):
-        print("characteristic Written: {values}",values=value)
+    def onCharacteristicWrite(self,c=QtBluetooth.QLowEnergyCharacteristic,value=QtCore.QByteArray):
+        print("characteristic Written: {values}".format(values=value))
 
 
-    def onCharacteristicRead(self,c=QtBluetooth.QLowEnergyCharacteristic,value=bytearray):
-        print("Characteristic Read:  {values}",values=value)
-
+    def onCharacteristicRead(self,c=QtBluetooth.QLowEnergyCharacteristic,value=QtCore.QByteArray):
+        print("Characteristic Read:  {values}".format(values=value))
+        self.dataReceived.emit(value)
 
     def update_currentService(self,indx=int):
         self.m_service = None
-        if indx>=0 and self.m_servicesUuid.count()>indx:
-           self.m_service = self.m_control.createServiceObject(self.m_servicesUuid.at(indx),this)
-        if not m_service:
-            self.statusInfoChanged("Service not found.", false)
+        if indx>=0 and len(self.m_servicesUuid)>indx:
+           self.m_service = self.m_control.createServiceObject(self.m_servicesUuid[indx])
+        if not self.m_service:
+            self.statusInfoChanged("Service not found.", False)
+            print("Service not found.")
             return
-        self.m_service.stateChanged(QtBluetooth.QLowEnergyService.ServiceState).connect(self.onServiceStateChanged(QtBluetooth.QLowEnergyService.ServiceState))
-        self.m_service.characteristicChanged(QtBluetooth.QLowEnergyCharacteristic,bytearray).connect(self.onCharacteristicChanged(QtBluetooth.QLowEnergyCharacteristic,bytearray))
-        self.m_service.characteristicRead(QtBluetooth.QLowEnergyCharacteristic,bytearray).connect(self.onCharacteristicRead(QtBluetooth.QLowEnergyCharacteristic,bytearray))
-        self.m_service.characteristicWritten(QtBluetooth.QLowEnergyCharacteristic,bytearray).connect(self.onCharacteristicWrite(QtBluetooth.QLowEnergyCharacteristic,bytearray))
-        self.m_service.error(QtBluetooth.QLowEnergyService.ServiceError).connect(self.serviceError(QtBluetooth.QLowEnergyService.ServiceError))
+        self.m_service.stateChanged.connect(self.onServiceStateChanged)
+        self.m_service.characteristicChanged.connect(self.onCharacteristicChanged)
+        self.m_service.characteristicRead.connect(self.onCharacteristicRead)
+        self.m_service.characteristicWritten.connect(self.onCharacteristicWrite)
+        self.m_service.error.connect(self.serviceError)
+        if self.m_service.state() == QtBluetooth.QLowEnergyService.DiscoveryRequired:
+            self.statusInfoChanged.emit("Connecting to service...",True)
+            print("Connecting to service... gatt:{gatt}".format(gatt=self.m_service.serviceUuid()))
+            self.m_service.discoverDetails()
+        else:
+            searchCharacteristic()
 
     def searchCharacteristic(self):
         if self.m_service:
-            for c in self.m_service.characteristics:
+            for c in self.m_service.characteristics():
                 if c.isValid():
                     if c.properties() & QtBluetooth.QLowEnergyCharacteristic.WriteNoResponse or c.properties() & QtBluetooth.QLowEnergyCharacteristic.Write:
                         self.m_writeCharacteristic = c
-                        update_connected(True)
-                        if c.properties()and QtBluetooth.QLowEnergyCharacteristic.WriteNoResponse:
+                        self.update_connected(True)
+                        if c.properties() & QtBluetooth.QLowEnergyCharacteristic.WriteNoResponse:
                             self.m_writemode=QtBluetooth.QLowEnergyService.WriteWithoutResponse
                         else:
                            self.m_writemode=QtBluetooth.QLowEnergyService.WriteWithResponse
                     if c.properties() & QtBluetooth.QLowEnergyCharacteristic.Read:
                         self.m_readCharacteristic=c
-                        if not m_readTimer:
-                            self.m_readTimer=QtCore.QTimer(this)
-                            self.m_readTimer.timeout.connect(self.read)
-                            self.m_readTimer.start(3000)
-                    self.m_notificationDesc = c.descriport(QtBluetooth.QBluetoothUuid.ClientCharacteristicConfiguration)
-                    if m_notificationDesc.isValid():
-                        self.m_service.writeDescriptor(m_notificationDesc,QtCore.QByteArray.fromHex("0110"))
+                        if not self.m_readTimer:
+                            self.m_readTimer=QtCore.QTimer()
+                            self.m_readTimer.timeout.connect(self.read)     #此处在计时器超时时调用读取函数读取characteristic
+                            self.m_readTimer.start(3000)                               #此处设定定时器读取间隔，单位ms
+                    self.m_notificationDesc = c.descriptor(QtBluetooth.QBluetoothUuid(0x2902))
+                    #print(QtBluetooth.QBluetoothUuid(0x2902).toString())
+                    print( self.m_notificationDesc.isValid())
+                    if self.m_notificationDesc.isValid():
+                        #print(bytearray([1,0]))
+                        self.m_service.writeDescriptor(self.m_notificationDesc,bytearray([1,0]))
 
 
 
-    def onServiceStateChanged(s=QtBluetooth.QLowEnergyService.ServiceState):
-        print("service state changed , state: {state}",state=s )
+    def onServiceStateChanged(self,s=QtBluetooth.QLowEnergyService.ServiceState):
+        print('service state changed , state: {state}'.format(state=s) )
         if s == QtBluetooth.QLowEnergyService.ServiceDiscovered:
-            searchCharacteristic()
+            self.searchCharacteristic()
 
-    def serviceError(e=QtBluetooth.QLowEnergyService.ServiceError):
-        print("Service error: {error}",error = e)
+    def serviceError(self,e=QtBluetooth.QLowEnergyService.ServiceError):
+        print("Service error: {error}".format(error = e))
 
+'''
 class DeviceFinder(QtCore.QObject):
     def __init__(self):
         super().__init__()
@@ -266,12 +308,13 @@ class DeviceFinder(QtCore.QObject):
     def quit(self):
         print("Bye!")
         QtCore.QCoreApplication.instance().quit()
-
+'''
 
 if __name__ == "__main__":
     import sys
 
     app = QtCore.QCoreApplication(sys.argv)
-    hello = BleInterface()
-    # sys.exit(app.exec_())
-    app.exec_()
+    m_bleInterface = BleInterface()
+    m_bleInterface.scanDevices()
+    sys.exit(app.exec_())
+   
