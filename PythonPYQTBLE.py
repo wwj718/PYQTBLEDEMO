@@ -40,7 +40,7 @@ class BleInterface(QtCore.QObject):
     currentDeviceChanged=QtCore.pyqtSignal(int)
     def __init__(self):
         super().__init__()
-        self.m_devodeDoscoveryAgent = QtBluetooth.QBluetoothDeviceDiscoveryAgent()
+        self.m_deviceDoscoveryAgent = QtBluetooth.QBluetoothDeviceDiscoveryAgent()
         self.m_notificationDesc = QtBluetooth.QLowEnergyDescriptor()
         self.m_control = None
         #self.m_servicesUuid = QtBluetooth.QBluetoothUuid()
@@ -68,11 +68,11 @@ class BleInterface(QtCore.QObject):
         #self.m_currentDevice(None)
 
         #绑定设备发现相关信号函数
-        self.m_devodeDoscoveryAgent.setLowEnergyDiscoveryTimeout(500)
-        self.m_devodeDoscoveryAgent.deviceDiscovered.connect(self.addDevice)
-        self.m_devodeDoscoveryAgent.error.connect(self.onDeviceScanError)
-        self.m_devodeDoscoveryAgent.finished.connect(self.onScanFinished)
-        self.m_devodeDoscoveryAgent.canceled.connect(self.onScanFinished)
+        self.m_deviceDoscoveryAgent.setLowEnergyDiscoveryTimeout(500)
+        self.m_deviceDoscoveryAgent.deviceDiscovered.connect(self.addDevice)
+        self.m_deviceDoscoveryAgent.error.connect(self.onDeviceScanError)
+        self.m_deviceDoscoveryAgent.finished.connect(self.onScanFinished)
+        self.m_deviceDoscoveryAgent.canceled.connect(self.onScanFinished)
         self.dataReceived.connect(self.printDataReceived)
 
     def printDataReceived(self,data=QtCore.QByteArray):
@@ -98,7 +98,7 @@ class BleInterface(QtCore.QObject):
 
     def scanDevices(self):
         self.m_devices.clear()
-        self.m_devodeDoscoveryAgent.start(QtBluetooth.QBluetoothDeviceDiscoveryAgent.DiscoveryMethod(2))
+        self.m_deviceDoscoveryAgent.start(QtBluetooth.QBluetoothDeviceDiscoveryAgent.DiscoveryMethod(2))
         print("Scanning for devices...")
 
     def read(self):
