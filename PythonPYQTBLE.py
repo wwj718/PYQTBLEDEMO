@@ -219,7 +219,7 @@ class BleInterface(QtCore.QObject):
         if indx>=0 and len(self.m_servicesUuid)>indx:
            self.m_service = self.m_control.createServiceObject(self.m_servicesUuid[indx])
         if not self.m_service:
-            self.statusInfoChanged("Service not found.", False)
+            self.statusInfoChanged.emit("Service not found.", False)
             print("Service not found.")
             return
         self.m_service.stateChanged.connect(self.onServiceStateChanged)
